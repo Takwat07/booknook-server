@@ -124,6 +124,54 @@ app.post('/books', verifyJWT, async (req, res) => {
   }
 });
 
+app.patch('/books/:id', verifyJWT, async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid book ID' });
+    }
+
+    const updateFields = { ...req.body };
+    delete updateFields._id;
+    if (updateFields.availableCopies !== undefined) {
+      updateFields.availableCopies = Number(updateFields.availableCopies);
+    }
+
+    const result = await booksCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { ...updateFields, updatedAt: new Date() } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+
+    res.json({ message: 'Book updated successfully', modifiedCount: result.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update book', error: err.message });
+  }
+});
+
+app.delete('/books/:id', verifyJWT, async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid book ID' });
+    }
+
+    const result = await booksCollection.deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+
+    res.json({ message: 'Book deleted successfully', deletedCount: result.deletedCount });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete book', error: err.message });
+  }
+});
+
 app.get('/', async (req, res) => {
   await connectDB();
   res.json({ message: 'BookNook server is running' });
