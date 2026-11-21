@@ -243,6 +243,43 @@ app.get('/borrows', verifyJWT, async (req, res) => {
   }
 });
 
+app.patch('/borrows/:id/return', verifyJWT, async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid borrow ID' });
+    }
+
+    const borrowRecord = await borrowsCollection.findOne({
+      _id: new ObjectId(id),
+      userEmail: req.decoded.email,
+    });
+
+    if (!borrowRecord) {
+      return res.status(404).json({ message: 'Borrow record not found' });
+    }
+
+    if (borrowRecord.status === 'returned') {
+      return res.status(400).json({ message: 'Book has already been returned' });
+    }
+
+    await borrowsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'returned', actualReturnDate: new Date() } }
+    );
+
+    await booksCollection.updateOne(
+      { _id: borrowRecord.bookId },
+      { $inc: { availableCopies: 1 } }
+    );
+
+    res.json({ message: 'Book returned successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to return book', error: err.message });
+  }
+});
+
 app.get('/', async (req, res) => {
   await connectDB();
   res.json({ message: 'BookNook server is running' });
