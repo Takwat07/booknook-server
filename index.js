@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 require('dotenv').config();
 
@@ -34,6 +35,33 @@ async function connectDB() {
     borrowsCollection = db.collection('borrows');
   }
 }
+
+const verifyJWT = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized access: token missing' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: 'Forbidden: invalid or expired token' });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
+
+app.post('/jwt', (req, res) => {
+  const { email, name } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: 'Email is required for token' });
+  }
+  const token = jwt.sign({ email, name }, process.env.JWT_SECRET, {
+    expiresIn: '7d',
+  });
+  res.json({ token });
+});
 
 app.get('/', async (req, res) => {
   await connectDB();
