@@ -172,6 +172,77 @@ app.delete('/books/:id', verifyJWT, async (req, res) => {
   }
 });
 
+app.post('/borrows', verifyJWT, async (req, res) => {
+  try {
+    await connectDB();
+    const { bookId, returnDate } = req.body;
+    const userEmail = req.decoded.email;
+
+    if (!bookId || !ObjectId.isValid(bookId)) {
+      return res.status(400).json({ message: 'Valid bookId is required' });
+    }
+
+    const bookObjectId = new ObjectId(bookId);
+    const book = await booksCollection.findOne({ _id: bookObjectId });
+    if (!book) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+
+    if ((book.availableCopies ?? 0) <= 0) {
+      return res.status(400).json({ message: 'No available copies left to borrow' });
+    }
+
+    // No Double Borrow: prevent borrowing the same book again if already active
+    const existingBorrow = await borrowsCollection.findOne({
+      bookId: bookObjectId,
+      userEmail,
+      status: 'borrowed',
+    });
+
+    if (existingBorrow) {
+      return res.status(409).json({ message: 'You have already borrowed this book' });
+    }
+
+    const borrowRecord = {
+      bookId: bookObjectId,
+      bookTitle: book.title,
+      bookImage: book.image || book.coverImage || '',
+      author: book.author || '',
+      category: book.category || '',
+      userEmail,
+      borrowDate: new Date(),
+      returnDate: returnDate ? new Date(returnDate) : null,
+      status: 'borrowed',
+    };
+
+    const borrowResult = await borrowsCollection.insertOne(borrowRecord);
+
+    await booksCollection.updateOne(
+      { _id: bookObjectId },
+      { $inc: { availableCopies: -1 } }
+    );
+
+    res.status(201).json({
+      message: 'Book borrowed successfully',
+      insertedId: borrowResult.insertedId,
+      borrow: borrowRecord,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to borrow book', error: err.message });
+  }
+});
+
+app.get('/borrows', verifyJWT, async (req, res) => {
+  try {
+    await connectDB();
+    const query = { userEmail: req.decoded.email };
+    const borrows = await borrowsCollection.find(query).sort({ borrowDate: -1 }).toArray();
+    res.json(borrows);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch borrowed books', error: err.message });
+  }
+});
+
 app.get('/', async (req, res) => {
   await connectDB();
   res.json({ message: 'BookNook server is running' });
