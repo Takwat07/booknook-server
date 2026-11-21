@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const app = express();
@@ -61,6 +61,67 @@ app.post('/jwt', (req, res) => {
     expiresIn: '7d',
   });
   res.json({ token });
+});
+
+app.get('/books', async (req, res) => {
+  try {
+    await connectDB();
+    const { search, category } = req.query;
+    const query = {};
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { author: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    if (category && category !== 'All') {
+      query.category = category;
+    }
+
+    const books = await booksCollection.find(query).toArray();
+    res.json(books);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch books', error: err.message });
+  }
+});
+
+app.get('/books/:id', async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid book ID' });
+    }
+
+    const book = await booksCollection.findOne({ _id: new ObjectId(id) });
+    if (!book) {
+      return res.status(404).json({ message: 'Book not found' });
+    }
+
+    res.json(book);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch book details', error: err.message });
+  }
+});
+
+app.post('/books', verifyJWT, async (req, res) => {
+  try {
+    await connectDB();
+    const bookData = req.body;
+    const newBook = {
+      ...bookData,
+      availableCopies: Number(bookData.availableCopies) || 1,
+      addedByEmail: req.decoded.email,
+      createdAt: new Date(),
+    };
+
+    const result = await booksCollection.insertOne(newBook);
+    res.status(201).json({ insertedId: result.insertedId, book: newBook });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to add book', error: err.message });
+  }
 });
 
 app.get('/', async (req, res) => {
