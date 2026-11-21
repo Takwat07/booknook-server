@@ -280,9 +280,23 @@ app.patch('/borrows/:id/return', verifyJWT, async (req, res) => {
   }
 });
 
+app.get('/health', async (req, res) => {
+  try {
+    await connectDB();
+    res.json({ status: 'ok', service: 'booknook-server' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
 app.get('/', async (req, res) => {
   await connectDB();
   res.json({ message: 'BookNook server is running' });
+});
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ message: 'Internal server error' });
 });
 
 app.listen(port, () => {
